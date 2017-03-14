@@ -243,7 +243,18 @@ class FullyConnectedNet(object):
     # self.bn_params[1] to the forward pass for the second batch normalization #
     # layer, etc.                                                              #
     ############################################################################
-    pass
+    reg=self.reg
+    out=[None]*(self.num_layers-1)
+    cache=[None]*self.num_layers
+    W=[None]*self.num_layers
+    b=[None]*self.num_layers
+    W[0],b[0]=self.params['W1'],self.params['b1']
+    out[0],cache[0]=affine_relu_forward(X,W[0],b[0])
+    for i in range(self.num_layers-2):
+        W[i+1],b[i+1]=self.params['W'+str(i+2)],self.params['b'+str(i+2)]
+        out[i+1],cache[i+1]=affine_relu_forward(out[i],W[i+1],b[i+1])
+    W[self.num_layers-1],b[self.num_layers-1]=self.params['W'+str(self.num_layers)],self.params['b'+str(self.num_layers)]
+    scores,cache[self.num_layers-1]=affine_forward(out[self.num_layers-2], W[self.num_layers-1], b[self.num_layers-1])
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -266,7 +277,19 @@ class FullyConnectedNet(object):
     # automated tests, make sure that your L2 regularization includes a factor #
     # of 0.5 to simplify the expression for the gradient.                      #
     ############################################################################
-    pass
+    loss,dscores=softmax_loss(scores,y)
+    for Wi in W: loss+=.5*reg*np.sum(Wi**2)
+    dout=[None]*(self.num_layers-1)
+    dW=[None]*self.num_layers
+    db=[None]*self.num_layers
+    dout[self.num_layers-2],dW[self.num_layers-1],db[self.num_layers-1]=affine_backward(dscores,cache[self.num_layers-1])
+    for i in range(self.num_layers-2):
+        dout[self.num_layers-i-3],dW[self.num_layers-i-2],db[self.num_layers-i-2]=affine_relu_backward(dout[self.num_layers-i-2],cache[self.num_layers-i-2])
+    _,dW[0],db[0]=affine_relu_backward(dout[0],cache[0])
+    for i in range(self.num_layers):
+        dW[i]+=reg*W[i]
+        grads['W'+str(i+1)]=dW[i]
+        grads['b'+str(i+1)]=db[i]
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
