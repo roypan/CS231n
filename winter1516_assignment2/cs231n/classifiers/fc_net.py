@@ -186,6 +186,10 @@ class FullyConnectedNet(object):
         self.params['b'+str(i+2)]=np.zeros((hidden_dims[i+1],))
     self.params['W'+str(self.num_layers)]=np.random.randn(hidden_dims[-1],num_classes)*weight_scale
     self.params['b'+str(self.num_layers)]=np.zeros((num_classes,))
+    if self.use_batchnorm:
+        for i in range(self.num_layers-1):
+            self.params['beta'+str(i+1)]=np.zeros((hidden_dims[i],))
+            self.params['gamma'+str(i+1)]=np.ones((hidden_dims[i],))
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -244,17 +248,29 @@ class FullyConnectedNet(object):
     # layer, etc.                                                              #
     ############################################################################
     reg=self.reg
-    out=[None]*(self.num_layers-1)
-    cache=[None]*self.num_layers
+    cache=[None]
     W=[None]*self.num_layers
-    b=[None]*self.num_layers
-    W[0],b[0]=self.params['W1'],self.params['b1']
-    out[0],cache[0]=affine_relu_forward(X,W[0],b[0])
-    for i in range(self.num_layers-2):
-        W[i+1],b[i+1]=self.params['W'+str(i+2)],self.params['b'+str(i+2)]
-        out[i+1],cache[i+1]=affine_relu_forward(out[i],W[i+1],b[i+1])
-    W[self.num_layers-1],b[self.num_layers-1]=self.params['W'+str(self.num_layers)],self.params['b'+str(self.num_layers)]
-    scores,cache[self.num_layers-1]=affine_forward(out[self.num_layers-2], W[self.num_layers-1], b[self.num_layers-1])
+    
+    for i in range(self.num_layers-1):
+        W[i],b=self.params['W'+str(i+1)],self.params['b'+str(i+1)]
+        if i==0:
+            out,cache[0]=affine_forward(X,W[0],b)
+        else:
+            out,cachetmp=affine_forward(out,W[i],b)
+            cache.append(cachetmp)
+        if self.use_batchnorm:
+            beta=self.params['beta'+str(i+1)]
+            gamma=self.params['gamma'+str(i+1)]
+            out,cachetmp=batchnorm_forward(out, gamma, beta, self.bn_params[i])
+            cache.append(cachetmp)
+        out,cachetmp=relu_forward(out)
+        cache.append(cachetmp)
+        if self.use_dropout:
+            out,cachetmp=dropout_forward(out, self.dropout_param)
+            cache.append(cachetmp)
+    W[self.num_layers-1],b=self.params['W'+str(self.num_layers)],self.params['b'+str(self.num_layers)]
+    scores,cachetmp=affine_forward(out, W[self.num_layers-1], b)
+    cache.append(cachetmp)
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -279,17 +295,20 @@ class FullyConnectedNet(object):
     ############################################################################
     loss,dscores=softmax_loss(scores,y)
     for Wi in W: loss+=.5*reg*np.sum(Wi**2)
-    dout=[None]*(self.num_layers-1)
-    dW=[None]*self.num_layers
-    db=[None]*self.num_layers
-    dout[self.num_layers-2],dW[self.num_layers-1],db[self.num_layers-1]=affine_backward(dscores,cache[self.num_layers-1])
-    for i in range(self.num_layers-2):
-        dout[self.num_layers-i-3],dW[self.num_layers-i-2],db[self.num_layers-i-2]=affine_relu_backward(dout[self.num_layers-i-2],cache[self.num_layers-i-2])
-    _,dW[0],db[0]=affine_relu_backward(dout[0],cache[0])
-    for i in range(self.num_layers):
-        dW[i]+=reg*W[i]
-        grads['W'+str(i+1)]=dW[i]
-        grads['b'+str(i+1)]=db[i]
+    dout,dW,db=affine_backward(dscores,cache.pop())
+    grads['W'+str(self.num_layers)]=dW+reg*W[self.num_layers-1]
+    grads['b'+str(self.num_layers)]=db
+    for i in range(self.num_layers-1):
+        if self.use_dropout:
+            dout=dropout_backward(dout,cache.pop())
+        dout=relu_backward(dout,cache.pop())
+        if (self.use_batchnorm):
+            dout,dgamma,dbeta=batchnorm_backward(dout,cache.pop())
+            grads['gamma'+str(self.num_layers-i-1)]=dgamma
+            grads['beta'+str(self.num_layers-i-1)]=dbeta
+        dout,dW,db=affine_backward(dout,cache.pop())
+        grads['W'+str(self.num_layers-i-1)]=dW+reg*W[self.num_layers-i-2]
+        grads['b'+str(self.num_layers-i-1)]=db
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
