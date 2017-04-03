@@ -129,7 +129,7 @@ class CaptioningSolver(object):
     # Make a deep copy of the optim_config for each parameter
     self.optim_configs = {}
     for p in self.model.params:
-      d = {k: v for k, v in self.optim_config.iteritems()}
+      d = {k: v for k, v in self.optim_config.items()}
       self.optim_configs[p] = d
 
 
@@ -149,7 +149,7 @@ class CaptioningSolver(object):
     self.loss_history.append(loss)
 
     # Perform a parameter update
-    for p, w in self.model.params.iteritems():
+    for p, w in self.model.params.items():
       dw = grads[p]
       config = self.optim_configs[p]
       next_w, next_config = self.update_rule(w, dw, config)
@@ -206,15 +206,15 @@ class CaptioningSolver(object):
     """
     num_train = self.data['train_captions'].shape[0]
     iterations_per_epoch = max(num_train / self.batch_size, 1)
-    num_iterations = self.num_epochs * iterations_per_epoch
+    num_iterations = int(self.num_epochs * iterations_per_epoch)
 
-    for t in xrange(num_iterations):
+    for t in range(num_iterations):
       self._step()
 
       # Maybe print training loss
       if self.verbose and t % self.print_every == 0:
-        print '(Iteration %d / %d) loss: %f' % (
-               t + 1, num_iterations, self.loss_history[-1])
+        print('(Iteration %d / %d) loss: %f' % (
+               t + 1, num_iterations, self.loss_history[-1]))
 
       # At the end of every epoch, increment the epoch counter and decay the
       # learning rate.

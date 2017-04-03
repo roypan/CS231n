@@ -37,7 +37,7 @@ class CaptioningRNN(object):
     self.cell_type = cell_type
     self.dtype = dtype
     self.word_to_idx = word_to_idx
-    self.idx_to_word = {i: w for w, i in word_to_idx.iteritems()}
+    self.idx_to_word = {i: w for w, i in word_to_idx.items()}
     self.params = {}
     
     vocab_size = len(word_to_idx)
@@ -69,7 +69,7 @@ class CaptioningRNN(object):
     self.params['b_vocab'] = np.zeros(vocab_size)
       
     # Cast parameters to correct dtype
-    for k, v in self.params.iteritems():
+    for k, v in self.params.items():
       self.params[k] = v.astype(self.dtype)
 
 
@@ -135,7 +135,26 @@ class CaptioningRNN(object):
     # defined above to store loss and gradients; grads[k] should give the      #
     # gradients for self.params[k].                                            #
     ############################################################################
-    pass
+    cache=[]
+    if self.cell_type=='rnn':
+      cell_f=rnn_forward
+      cell_b=rnn_backward
+    elif self.cell_type=='lstm':
+      cell_f=lstm_forward
+      cell_b=lstm_backward
+    h0=features@W_proj+b_proj
+    we,cachetmp=word_embedding_forward(captions_in,W_embed)
+    cache.append(cachetmp)
+    cell,cachetmp=cell_f(we,h0,Wx,Wh,b)
+    cache.append(cachetmp)
+    cout,cachetmp=temporal_affine_forward(cell,W_vocab,b_vocab)
+    cache.append(cachetmp)
+    loss,dcout=temporal_softmax_loss(cout,captions_out,mask)
+    dcell,grads['W_vocab'],grads['b_vocab']=temporal_affine_backward(dcout,cache.pop())
+    dwe,dh0,grads['Wx'],grads['Wh'],grads['b']=cell_b(dcell,cache.pop())
+    grads['W_embed']=word_embedding_backward(dwe,cache.pop())
+    grads['b_proj']=np.sum(dh0,0)
+    grads['W_proj']=features.T@dh0
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -197,7 +216,19 @@ class CaptioningRNN(object):
     # functions; you'll need to call rnn_step_forward or lstm_step_forward in #
     # a loop.                                                                 #
     ###########################################################################
-    pass
+    captions[:,0]=self._start
+    h=features@W_proj+b_proj
+    c=np.zeros_like(h)
+    for t in range(max_length-1):
+      we,_=word_embedding_forward(captions[:,t],W_embed)
+      we=we.reshape((N,-1))
+      if self.cell_type=='rnn':
+        h,_=rnn_step_forward(we,h,Wx,Wh,b)
+      elif self.cell_type=='lstm':
+        h,c,_=lstm_step_forward(we,h,c,Wx,Wh,b)
+      cout,_=temporal_affine_forward(h.reshape((N,1,-1)),W_vocab,b_vocab)
+      cout=cout.reshape((N,-1))
+      captions[:,t+1]=np.argmax(cout,1)
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
